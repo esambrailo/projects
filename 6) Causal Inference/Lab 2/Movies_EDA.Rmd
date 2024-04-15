@@ -1,0 +1,342 @@
+---
+title: 'Exploratory Data Analysis_Round2'
+subtitle: 'Lab 2 - Netflix Movies'
+author: "Bailey Kuehl, Erik Sambrailo, Jenna Sparks, Roshni Tajnekar"
+date: '2023-04-09'
+header-includes:
+   - \usepackage{amssymb}
+   - \usepackage[makeroom]{cancel}
+output: pdf_document
+---
+
+```{r package install, include=FALSE, message=FALSE}
+
+#package to install for in-code flow charts
+install.packages('DiagrammeR')
+
+```
+
+```{r load packages, message=FALSE, echo=FALSE, results=FALSE}
+library(tidyverse)
+library(dbplyr)
+library(glue) #f-string like formatting
+library(latex2exp) # for writing Latex in plot text
+library(tinytex) # to convert to pdf
+library(knitr)
+library(DiagrammeR)
+```
+
+```{r load data, echo=FALSE, results=FALSE}
+#Loading the Netflix dataset
+movies <- read.csv('./movies.csv')
+summary(movies)
+```
+
+# Research Question
+
+**How does the budget of a movie affect the gross revenue of a movie?**
+
+$$
+\begin{aligned}
+X_{Primary} &= \text{Budget}\\
+&\text{additional covariates to explore}\\
+X_1 &= \text{Runtime}\\
+X_2 &= \text{IMDB-votes}\\
+X_3 &= \text{IMDB-score}\\
+X_4 &= \text{Age-certification}\\
+X_5 &= \text{Genre}\\
+X_6 &= \text{Country}\\
+X_7 &= \text{Director/Writer}\\
+X_8 &= \text{Production-Company}\\
+X_9 &= \text{A-list-Stars}\\
+\\
+Y_{Primary} &= \text{Revenue}\\
+\end{aligned}
+$$
+
+
+```{r flow diagram, echo=FALSE}
+
+system('echo \'
+digraph DAG {
+
+  
+  graph [overlap = true, fontsize = 10, labelloc = t]
+
+  node [shape = rectangle,
+        fontname = Helvetica]
+  E [label = Revenue]
+  A [label = IMDB_Votes]
+  B [label = Runtime]
+  C [label = Movie Stars]
+  D [label = Lead_Studio]
+  F [label = Budget]
+  G [label = Production_Country]
+  
+  node [shape = oval,
+        fontname = Helvetica]
+  1 [label = e_1]
+  2 [label = e_2]
+  3 [label = e_3]
+  4 [label = e_4]
+  5 [label = e_5]
+  6 [label = e_6]
+  7 [label = e_7]
+
+
+  B->E D->E C->E 
+  1->E 2->B 3->D 4->C 5->E
+  F->E 6->F G->E 7->G
+  
+}
+\' > graph.dot')
+system('dot -Tpdf graph.dot -o SEM.pdf')
+```
+
+```{r, out.width="0.7\\linewidth", include=TRUE, fig.align="center", fig.cap=c("Structural Equation Model"), echo=FALSE}
+knitr::include_graphics("./SEM.pdf")
+```
+
+
+# Mark's Feedback to Incorporate
+
+ 1) **Lower Bound Runtime:** set lower bound runtime. add barchart on runtime and look for a nice lower breaking point for runtime amongst the lower end runtime samples and censor the samples to that threshold or higher.
+    
+    - With this new dataset, the lower bound is no longer needed as the shortest film is 75 minutes. 
+ 
+ 2) **Lead Studio:** is there any data about the lead studio? think about creating a two or three level categorical variable in terms of size of the lead studio
+ 
+    - We now have the lead studio built into our dataset, but **need to create the categorical variable to match size.**
+    - List of companies and size here: https://www.the-numbers.com/movies/production-companies/
+    - **We were unsuccessful at finding adequate data to better fold Lead Studio.**
+ 
+ 3) **A-list Talent:** think about how you might categorize a talent (star) category (includes A list or not or includes multiple A list or not) and include that.
+ 
+    - The availability of back-dated actor rankings is limited, we were able to find annual top-100 lists and have combined a few of those to create a list of A-list celebrities. We are using a couple pre-dated years of that list to highlight the top trending A-list stars. 
+ 
+ 4) **Budget:** Are the advertising budgets available? if not, maybe a good OVB candidate
+ 
+    - We now have budget built into our dataset. 
+ 
+ 5) **Time Frame:** keep the time frame of the movie releases small. The country has changed considerably over the past 20 years. (????)
+ 
+    - We will reduce the dataset to a narrow time frame, and one that specifically excludes COVID, and allows for plenty of time for a movie to pass through it's initial trending hype. 
+ 
+ 6) **Popularity:** how is popularity measured? Is it the maximum popularity or is there a temporal slice to the popularity? It is metric?
+ 
+    - Due to issues about extreme time-sensitivity of how popularity is calculated, we have decided to eliminate it from our analysis. 
+ 
+Mark - *My biggest worry is about time's impact and creating apples to apples comparison and limiting the popularity to that for the same period of time say up the same number weeks after release of the film.*
+ 
+  - We have addressed the time concern as best we can by selecting the date range we have, and have removed popularity from the analysis completely. 
+
+# My Additional Thoughts
+     
+ 1) **Metric Rating Calc:** Do we want to create a metric rating that is a calculation of ratings and votes?
+  
+    - Won't be an issue if we change Y variable to revenue as it is a metric variable. 
+    
+2) **Country as co-variate** How do we best manage country as a co-variate since it has a many to many relationship with movies?
+  
+    - In this new dataset, only one country is listed, which makes this easier. **Do we want to further categorize countries?**
+ 
+# Initial Data Review
+
+```{r review data, echo=FALSE, results=FALSE, fig.width = 10, fig.height = 4}
+
+head(movies) 
+
+#removing columns that we do not intend to use
+colnames(movies)
+
+dim(movies)
+```
+
+## Time Frame
+
+Because of concerns regarding I.I.D., we want to consolidate the time frame of movie releases. Because COVID was such a influential event for individuals and their at-home movie viewing habits, it would be a problematic to compare movies that were released during that period to periods that preceded it. For that reason we have decided to shorten the releases timeframe to be movies from 2016-2019. This reduces the dataset to **800** total records from 7668. Re-evaluating the histogram, we have something roughly close to a uniform distribution. 
+
+**We believe this reduction of time frame greatly reduces the concerns that time poses on I.I.D for two reasons:**
+
+   1) It better supports identical distribution by eliminating movies that were released during COVID. 
+   
+   2) Adequate time has passed between now and the timeframe that these movies were released as to not create issues with comparing "just released" movies to movies that have been out for a while. 
+
+```{r release_year, echo=FALSE, results=FALSE, fig.width = 10, fig.height = 4}
+histdata_og <- hist(movies$year, 
+                    breaks=50,
+                    xlab='Release Year',
+                    main='Pre-Filter: Distribution of Release Year')
+
+movies <- movies[(movies$year >= '2016') & (movies$year < '2020'),]
+
+hist(movies$year, 
+     xlab='Release Year',
+     main='Post-Filter: Distribution of Release Year')
+
+dim(movies)
+```
+
+
+## Runtime
+
+First we review the distribution of runtimes that current exist in our dataset. We learn that the minimum movie length in this set is 76 minutes, which means that short films are already excluded.
+
+```{r runtime, echo=FALSE, results=FALSE, fig.width = 10, fig.height = 4}
+
+hist(movies$runtime, 
+     breaks=50,
+     xlab='Runtime',
+     main='Distribution of Runtime')
+
+summary(movies$runtime)
+# movies <- movies[movies$runtime >= 60,] 
+
+# hist(ntflx_movies$runtime, 
+#      breaks=50,
+#      xlab='Runtime',
+#      main='Post-Filter: Distribution of Runtime')
+# 
+# dim(ntflx_movies)
+```
+
+## Country 
+
+We are not limiting our dataset by any country of production, but will instead be exploring it as a co-variate. 
+
+```{r production_country, echo=FALSE, fig.width = 10, fig.height = 4}
+
+################################################################################
+#code below was from originally filtering data to just North America. 
+
+# ntflx_movies$NorAm <- str_detect(ntflx_movies$production_countries, 'US|CA|MX')
+# 
+# print("Movies containing North American Countries in Production list.")
+# table(ntflx_movies$NorAm)
+
+# ntflx_movies <- ntflx_movies[ntflx_movies$NorAm,]
+################################################################################
+```
+
+## Removing Null Values
+
+**Budget**
+Now checking the variables we care about. There are 249 rows that contain null values for budget, which we believe is an important variable, so removing those from the dataset puts us at **551**. 
+
+**Gross**
+There are still two movies without gross listed, so we remove those. **549**
+
+**Age Cert**
+We find there are two movies without an age_cert, so we remove those. **547**
+
+**Titles**
+Checked that each record is unique and that there are not repeat titles. 
+
+```{r view_counts, echo=FALSE, fig.width = 10, fig.height = 4}
+movies <- movies %>% filter(!is.na(budget))
+movies <- movies %>% filter(!is.na(gross))
+dim(movies)
+table(movies$rating)
+movies <- movies[!movies$rating == "",]
+dim(movies)
+```
+## Indentifying "Stars"
+
+We want to identify the a-list stars. In order to reduce any potential of reverse causality (a cast members popularity being a result of the success of the movie in question), we want to define the actor's popularity **before** the time range we are using for analysis.  
+
+We found at IMDB's site, annual list for the top 100 actors of any specific year (2016 link here: https://www.imdb.com/list/ls066347533/ ). We selected 2014 & 2015 which are the two years prior to our movie releases. This eliminates any reverse causality of their popularity coming from the movies we are analyzing.
+
+We merged this list with our dataset to identify the A-list stars to find that **147** movies contain an individual from these top-100 lists.
+
+```{r load stars data, echo=FALSE, results=FALSE}
+
+#looking at top 100 lists of actors
+
+#Loading the stars dataset
+stars_2015 <- read.csv('./Top2015.csv')
+stars_2014 <- read.csv('./Top2014.csv')
+
+#combining the two years
+stars_dup <- rbind(stars_2015, stars_2014)
+
+#reducing to unique names
+stars <- unique(stars_dup[c('Name')])
+stars$Alist <- 1
+
+################################################################################
+# #Loading the stars dataset
+# stars_topk <- read.csv('./Top1000Actors.csv')
+
+# #reducing top 1000 starts list to those before 2017.
+# stars_topk$Modified <- as.Date(stars_topk$Modified)
+# stars_topk <- stars_topk[stars_topk$Modified <= as.Date('2017-01-01'),]
+# stars_topk <- stars_topk['Name']
+# stars_topk$Star <- 1
+################################################################################
+
+#adding stars to data set
+movies <- left_join(movies, stars, 
+                           by=c('star'='Name'))
+
+movies$Alist[is.na(movies$Alist)] <- 0
+table(movies$Alist)
+```
+## Categorizing Production Studios
+
+We want to create a categorical variable for the main production studios that categorizes them by production size.  Unfortunately we were unable to find an exhaustive list ranking all production studios.  But we were able to find the top 600 international studios. 
+
+```{r load stars data, echo=FALSE, results=FALSE}
+
+#importing and cross-referencing studios against dataset
+
+#loading production companies
+company <- read.csv('./production_companies.csv')
+
+#checking matches for our dataset
+match <- left_join(movies, company, 
+                           by=c('company'='production_company'))
+
+write.csv(match[is.na(match$ttl_movies),], file='./mismatch.csv')
+```
+
+
+# Omitted Variables
+
+TBD
+
+# OUTPUT 
+
+**Below is our final output from the EDA and it's breakdown.**
+
+```{r final dataset, echo=FALSE}
+print("Our final dataset size:")
+dim(movies)
+
+print("With the following fields:")
+summary(movies)
+
+print("Dataset example header:")
+head(movies)
+```
+
+# Omitted Variables
+
+TBD
+
+# OUTPUT 
+
+**Below is our final output from the EDA and it's breakdown.**
+
+```{r final dataset, echo=FALSE}
+print("Our final dataset size:")
+dim(movies)
+
+print("With the following fields:")
+summary(movies)
+
+print("Dataset example header:")
+head(movies)
+table(movies$rating)
+```
+
+

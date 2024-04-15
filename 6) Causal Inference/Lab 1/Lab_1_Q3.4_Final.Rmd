@@ -1,0 +1,40 @@
+---
+title: "Lab 1: Question 3.4"
+subtitle: "Attitudes Toward the Religious"
+author: "Bailey Kuehl, Erik Sambrailo, Jenna Sparks, Roshni Tajnekar"
+output: pdf_document
+date: "March 7, 2023"
+---
+
+```{r load packages, message=FALSE, echo=FALSE, results=FALSE, warning=FALSE}
+library(tidyverse)
+library(glue) #f-string like formatting
+library(latex2exp) # for writing Latex in plot text
+library(tinytex) # to convert to pdf
+library(dplyr) # to filter the columns
+```
+
+```{r load data, message=FALSE, echo=FALSE, results=FALSE, warning=FALSE}
+gss <- read.csv('../lab_1/datasets/legislators-current.csv')
+```
+
+```{r echo=FALSE}
+#summary(gss)
+#gss$diff <- (gss$prottemp - gss$cathtemp)
+```
+
+We would like to test whether the US population feels more positive towards Protestants or towards Catholics. To test this *paired t-test* is proposed. For this we define two random variables $P$ (Positive feelings towards Protestants) and $C$ (Positive feelings towards Catholics), where both $p,c \in \mathbb{N} \cap [0:10]$. The null hypothesis for paired t-test assumes that the true mean difference between the paired samples is zero.That is; $H_0: E[Pi - Ci] = 0$. We will now evaluate the standard assumptions of this test. 
+
+### Assumption 1: Metric Scale
+
+To meet the assumption of metric data, both $P$ & $C$ need to be measured on a metric scale; however, the feeling thermometer proposed is an ordinal scale. Additionally, feelings are subjective from person-to-person, so the difference between temperatures is likely inconsistent and difficult to quantify. **Therefore, this data does not satisfy the metric data assumption.**
+
+### Assumption 2: Independence and Identically Distributed
+
+All $(P_1, P_2, ... P_n)$ and $(C_1, C_2, . . . C_n)$ need to be I.I.D. Because Catholics and Protestants are both forms of Christianity, it is likely that the two groups share common values and beliefs. Thus, respondents to this survey may feel similarly about both groups, as it may be difficult to define a discernible difference between the two religions. Additionally, it's possible that respondents practice one of these religions, which would affect their responses of favorability and thus the independence of the data. **Therefore, the independence of the data is a concern for this analysis.**
+
+### Assumption 3: Normality (P - C)
+
+Both $P$ & $C$ need to follow a normal distribution. Because we are working with ordinal data, they will not be normally distributed. Similarly, the differences between $P$ & $C$ will also not follow normal distribution. **Therefore, this assumption is not satisfied.**
+
+

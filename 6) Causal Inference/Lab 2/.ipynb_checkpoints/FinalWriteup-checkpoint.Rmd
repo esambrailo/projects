@@ -1,0 +1,263 @@
+---
+title: \vspace{-0.75cm} \begin{Large} Estimating Movie Box Office Revenue \end{Large} \vspace{0cm}
+include-before:
+  \vspace*{-20pt}
+subtitle: "Datasci 203: Lab 2 Report"
+author: "Erik Sambrailo, Jenna Sparks, Bailey Kuehl, and Roshni Tajnekar" 
+geometry: margin=2cm
+header-includes: #allows you to add in your own Latex packages
+- \usepackage{float} #use the 'float' package
+- \floatplacement{figure}{H} #make every figure with caption = h
+output:
+    pdf_document:
+          toc: false
+          number_sections: false
+          extra_dependencies: ["capt-of", "hyperref", "grffile", "wrapfig", "caption"]
+date: "04-18-2023"
+---
+
+```{r, install packages, message=FALSE, echo=FALSE, inclue = FALSE}
+library(tidyverse)
+library(dbplyr)
+library(latex2exp) 
+library(tinytex)
+library(knitr)
+library(stargazer)
+library(sandwich)
+library(lmtest)
+library(Hmisc)
+library(regclass)
+library(moments)
+library(glue)
+library(car)
+library(kableExtra)
+knitr::opts_chunk$set(echo=FALSE, message=FALSE)
+```
+
+```{r load data, echo=FALSE, message=FALSE, warning=FALSE}
+conf_df <- read_csv('./folded_test_set.csv')
+# Drop extra id ("X") column
+conf_df <- subset(conf_df, select = -c(X))
+#changing gross to revenue for clarity
+names(conf_df)[names(conf_df) == "gross"] <- "revenue"
+conf_df <- conf_df[,c("revenue", "budget", "votes", "rating", "runtime", "country")]
+```
+
+## Introduction 
+\vspace{-4pt}
+Understanding the key factors that contribute to the success of a movie is critical for movie producers, investors, and distributors in order to maximize their impact on the movie industry. Revenue is a key indicator of movie success for such stakeholders, warranting a thorough investigation into which variables contribute significantly.
+
+\begin{wrapfigure}{r}{0.20\textwidth}
+  \centering
+```{r add initial causal diagram, out.width = "100px"}
+knitr::include_graphics("./initial_causal.png")
+```
+    \caption{Causal Diagram}
+\end{wrapfigure}
+
+Our company, Data Science Consulting™, believes that explanatory models are a powerful tool we could use to gain insight into such effects. For our expertise with explanatory models, we have been contracted by Big Fat Movie Productions™ (BFM) to create a revenue prediction model and help them understand key factors influencing movie revenue. By examining variables such as production budget, Internet Movie Database (IMDb) votes, country of origin, runtime, IMDb rating, and age certification, we hope to advise BFM on important factors for increasing revenue. We will utilize the classic linear model (CLM) to answer the following question:
+
+\vspace{-3pt}
+\begin{quote}
+  \textit{How does the spending (budget) for a movie affect the revenue it earns?}
+\end{quote}
+\vspace{-3pt}
+The relationship between the predictor variable and the outcome outlined in the research question is displayed in our initial casual path diagram (Figure 1). We predict that increasing the budget will increase the revenue it earns. 
+
+\vspace{-6pt}
+
+## Data and Methodology
+\vspace{-4pt}
+The observational dataset that we found is from the popular film database site (IMDb)^1^. The dataset consists of the most popular films for a given year and includes information about budget, revenue, age certifications, cast/crew, IMDb votes, runtime, and other movie attributes. We chose to narrow our research to films that were released in the years 2016-2019. These are the most recent years available in the dataset that were not heavily affected by the COVID-19 pandemic. This narrowed timeframe also reduces time-based IID concerns.
+
+We randomly split our base dataset into training (30% of original data) and confirmation (70% of our original data) datasets. This data splitting was used to reduce the potential overfitting of our models in the training stage, thus promoting more reliable coefficients in our final regressions.
+
+### Operationalized Variables
+\vspace{-4pt}
+The below table shows the variables we chose to represent our concepts:
+
+
+\tiny
+\vspace{-8pt}
+```{r operationalized, message=FALSE, echo=FALSE, results=TRUE, size="tiny", fig.pos= "h"}
+#define table
+op_df <- data.frame(
+   'Concept' = c("The financial success of a movie. (Y)","The cost of making a movie. (X)", "Movie inclusivity by age. (Covariate)", "runtime, country of origin, IMDb votes (Covariates)"),
+   'Operation' = c("IMDb’s Reported Movie Gross Revenue Value ($)", "IMDb’s Movie Budget Estimate ($)","Movie Age Certification", "As-is"), check.names = FALSE)
+#display table
+lx<-kable(
+  op_df,
+  "latex",
+  caption = "Operationalized Variables", 
+  booktabs = TRUE,
+  )
+row_spec(lx, 6, hline_after=T) %>%
+kable_styling(latex_options = "HOLD_position")
+```
+\normalsize
+
+For all of our models our outcome variable (Y) is movie gross revenue. Gross revenue may give an inflated perception of financial success without a proper understanding of the associated taxes and fees to be deducted. On the contrary, these gross revenue numbers, reported by IMDB, only represent theater box office sales, and only for the US and Canada, and therefore could lead to an under-representation of true movie revenue.
+
+For our primary predictor variable (X) we are using IMDb’s budget values. As indicated in an article from Forbes^2^, there is some discretion as to what is included in a defined movie budget. IMDb also discloses similar ambiguity in the budget information collected, and they identify their reported numbers as estimates. 
+
+### Key Modeling Decisions
+\vspace{-4pt}
+Through exploratory data analysis, we investigated several variables in our dataset, including runtime, the total number of IMDb votes (regardless of score), country of origin, and recommended age advisory rating for the movie (age certification). Some variables, such as IMDb score were removed because they could also be considered outcome variables.  For others, like movie director and writer, we aimed to create folded categorical variables but were unsuccessful finding the proper data to do so.  There were also concerns around the causal relationships between these variables and budget.  Lastly, we explored the effect of genre in our models, but found it insignificant and concerning regarding IID due to the subjective nature of specific genres (i.e. romantic comedy). This left us with six columns for both the training and confirmation datasets. This workflow and corresponding datapoint count updates are shown below in Table 2.
+
+\tiny
+```{r accounting variables, message=FALSE, echo=FALSE, results=TRUE, size="tiny", fig.pos= "h"}
+#define table
+acc_df <- data.frame(
+   'Reason for Removal' = c("Start","Year Consolidation", "Null Values", "Not Rated", "Folding", "Training Data", "Confirmation Data"),
+   'Explanation' = c("original dataset", "reduce years to 2016-2020", "nulls in budget, revenue, age certification", "records w/o age certification", "country (us/other) & age cert (G w/ PG)", "30%", "70%"),
+   '# Samples Removed' = c(0,6868,253,5,0,"",""),
+   '# Samples Remaining' = c(7668,800,547,542,542,163,379), check.names = FALSE)
+#display table
+lz<-kable(
+  acc_df,
+  "latex",
+  caption = "Accounting Table - Sample Removal",
+  booktabs = TRUE,
+  )
+row_spec(lz, 5, hline_after=T)%>%
+kable_styling(latex_options = "HOLD_position")
+```
+\normalsize
+
+Initial analysis found that the revenue, budget, and votes variables were positively skewed. To optimize the performance of our models, we performed a natural logarithm transformation of these three variables. We executed these transformations to address skewness of the variables, reduce the heteroscedasticity of the variance in the data, and achieve better linear relationships between the outcome and treatment variables.
+
+```{r residuals plots, warning=FALSE, results=FALSE, echo=FALSE}
+#model two, models one and three reproduced below.
+model_two <- lm(log(revenue) ~ log(budget) + log(votes) + rating, data = conf_df)
+coef(model_two, vcov = vcovHC(model_two))
+
+# Save plot
+png(filename="./residuals.png")
+plot(model_two, which = 1, bty='n', col ='darkgrey', cex=3, cex.lab = 1.5, cex.main = 1.5, cex.axis = 1.5)
+dev.off()
+
+```
+
+\begin{wrapfigure}[18]{r}{0.33\textwidth}
+  \caption{Residuals Plot}
+```{r add residual plot, out.width = "110%"}
+knitr::include_graphics("./residuals.png")
+```
+\vspace{-8pt}
+\end{wrapfigure}
+
+Through the exploratory stage of our analysis, we found that our second model demonstrated residuals that were fairly equally distributed around zero. Figure 2 on the right shows a residual plot performed on the 70% confirmation set of our BLP model.  This model also had a relatively high adjusted $R^2$ value and statistically significant coefficients. Thus, we chose to model revenue in the following regression:
+\vspace{-2pt}
+$$
+\widehat{ln(\text{revenue})} = \beta_0 + \beta_1\cdot ln(\text{budget}) + \beta_2\cdot ln(\text{votes}) + \beta_3\cdot   \text{age certification}  + \epsilon
+$$
+
+\vspace{-2pt}
+where $\epsilon$ represents the error term that is not captured by the regression model. With our main predictor variable as budget, we evaluate the following hypotheses. Our null hypothesis is that budget has no effect on how much revenue a movie earns ($H_0: \beta_{1} = 0$) and our alternate hypothesis is that budget does have an effect on how much revenue a movie earns ($H_A: \beta_{1} \neq 0$)
+
+
+## Results
+\vspace{-4pt}
+The stargazer table (Table 3) shows the estimated coefficients, standard errors, and p-values for the relationships among our test variables. 
+
+\footnotesize
+```{r code for models, echo=FALSE, warning=FALSE, inclue=FALSE, results=FALSE}
+# Model Regressions
+model_one <- lm(log(revenue) ~ log(budget), data = conf_df)
+coef(model_one, vcov = vcovHC(model_one))
+
+model_three <- lm(log(revenue) ~ log(budget) + log(votes) + rating + runtime + country, data = conf_df)
+coef(model_three, vcov = vcovHC(model_three))
+# Standard Errors
+se.model_one = sqrt(diag(vcovHC(model_one)))
+se.model_two = sqrt(diag(vcovHC(model_two)))
+se.model_three = sqrt(diag(vcovHC(model_three)))
+```
+
+```{r stargazer, echo=FALSE, warning=FALSE, results = 'asis'}
+#Generate stargazer table
+stargazer(model_one, model_two, model_three, header=FALSE, type='latex',
+          title="Regression Results for Movie Revenue",
+          se = list(se.model_one, se.model_two,se.model_three),
+          omit.stat = "f",
+          covariate.labels = c("ln(budget)", "ln(votes)", "rating: PG-13", "rating: R", "runtime", "country: United States"),
+          dep.var.labels=c("ln(revenue)"), font.size = "small",
+          no.space=TRUE, single.row = TRUE
+)
+```
+\normalsize
+
+Based on the data, all three models demonstrate a statistically significant coefficient (p<0.001) for the natural logarithmic transformation of budget. Therefore, we will reject our null hypothesis that budget has no effect on how much a movie earns. Point estimates for this key variable are all positive and range from 0.433 to 0.892 among the three models. In practice, this signifies that increasing the budget allocated to a movie is predicted to increase the amount of revenue it draws in. In our second model (2), for example, the coefficient of 0.433 indicates that a 10% increase in budget is expected to lead to approximately 4.2% increase in revenue.^3^ To put this into perspective, the budget for "Jumanji: Welcome to the Jungle" was approximately $90 million, with the revenue being approximately $962 million. If Jumanji’s production company, Columbia Pictures, had increased the budget to $99 million, we would expect their revenue to have increased to $1 billion. While this method could be quite effective for increasing revenue, it is important to consider the size and scope of the production company and whether they could accommodate such an increase in upfront spending. Because our relationship is represented as the elasticity of the effect of budget on revenue, it does not provide enough information to make practical significance claims. For instance, for a movie like Jumanji, where the revenue is 10x the budget, the predicted return on investment on additional budget spend may have been beneficial.  On the contrary, if a movie’s revenue is only 2x its budget, then in hindsight, the increased budget would not have been beneficial.
+
+```{r assumptions plots, warning=FALSE, results=FALSE, echo=FALSE}
+# Multicollinearity assumption check
+vif(model_two)
+# Normality assumption check
+kurtosis(model_two$residuals) - 3 
+# Save plot
+png(filename="./qqnorm.png")
+plot(model_two, which = 2, cex=3, cex.lab = 1.5, cex.main = 1.5, cex.axis = 1.5)
+dev.off()
+```
+
+\begin{wrapfigure}[18]{r}{0.33\textwidth}
+  \caption{QQ Norm Plot}
+```{r add qqnorm plot, out.width = "110%"}
+knitr::include_graphics("./qqnorm.png")
+```
+\vspace{-8pt}
+\end{wrapfigure}
+
+Surprisingly, we also found that the age certification of a movie can have a statistically significant impact on its revenue. Movies targeted more towards older audiences (PG-13 & R) are predicted to have 53.14% and 73.07% less revenue, respectively, than those that are inclusive of younger audiences (G & PG). Less surprisingly, we note that models (2) and (3), which evaluated the effect of IMDb votes, had a positive impact on revenue. This was the expected effect, as a large number of votes indicates that many people have watched the movie and contributed to the gross revenue. However, this correlation does not offer much practically, as our model does not take into account what prompts consumers to vote, or whether votes/ticket purchases were motivated by advertisement spent within our budget. 
+
+## Limitations 
+\vspace{-4pt}
+
+In order to gain meaningful information from the CLM approach, we must validate the five assumptions required for the CLM against our best linear model (model 2). One of these assumptions is independently and identically distributed (I.I.D) data points. The dataset we have chosen was curated by querying IMDb’s movie database. However, the movies selected were sorted based on ascending “popularity” according to IMDb, which is a potential concern for I.I.D observations, which means there were likely existing trends in the data, violating the independence assumption.
+
+Normal distribution of errors is another requirement for the CLM in order for the Ordinary Least Squares (OLS) to produce consistent, accurate coefficients. Numerically, we found a high kurtosis value (7.1) and visually, we observed heavy tails in the Normal Quantile-Quantile plot (Figure 3). Thus, normality is a potential concern with our proposed models.
+
+We found no major violations to perfect collinearity among variables, demonstrated by variance inflation factors (VIF) of approximately 1.2. Similarly, we found no significant problems with the assumptions of homoskedastic errors or linear conditional expectation.
+
+\begin{wrapfigure}[18]{r}{0.4\textwidth}
+  \centering
+  \caption{Causal Diagram with Omitted Variables}
+```{r add causal diagram, out.width = "100%"}
+knitr::include_graphics("./causal_updated.png")
+```
+\end{wrapfigure}
+
+Structurally, our models are limited by the variables available in the dataset, leaving room for omitted variable bias in our estimates. One variable that was not included in the dataset but which would have ideally been incorporated into our model is “star power” (i.e. a measure of how many “star” actors are in the film). While we were able to join our dataset with a secondary dataset^4^ to derive “star power,” the variable was limited in scope and difficult to interpret, so it was not considered in our models. We expect that star power would be positively correlated with our primary treatment variable (budget), given that larger budgets can afford higher-profile actors. Furthermore, we expect star actors to draw in a larger audience, and thus that star power would have a positive correlation with the revenue of a movie. Thus, we would predict the effect of this omitted variable bias to be away from zero, or, an overestimation of our coefficients. We would expect similar behavior if we had included a variable for the current status of the economy, such as the Gross Domestic Product (GDP). 
+
+Figure 4, shows an updated causal path diagram that demonstrates conceptual relationships between each of the predictor variables and the outcome. Dotted lines indicate reverse causality, which occurs between the votes and revenue. Higher revenue also suggests increased popularity leading to more viewing and votes which indicates a positive correlation between revenue and votes.
+
+## Conclusion
+\vspace{-4pt}
+In our study, we explored the use of explanatory linear regression models to evaluate the effect of certain movie production components on revenue produced. Our highest confidence model predicts that a 10% increase in budget will result in a 4.2% increase in revenue, all other variables are kept constant. Secondarily, our model predicts that a 10% increase in the number of IMDb votes signifies a 7.7% increase in revenue, and a PG-13 or R rating will see 53.14% and 73.07% decreases in revenue respectively, compared to their younger-audience inclusive counterparts (G & PG). However, we do not recommend that BFM utilize our findings regarding the relationship between IMDb votes and revenue, as we do not have enough information about this relationship, and believe that reverse causality inflated our coefficients.
+
+From a product perspective, we feel that the increase in budget required to make a substantial return on investment in revenue is likely not worth the cost. Given this, along with the limited size of our dataset and potential statistical concerns, we would not recommend that Big Fat Movie Productions (BFM) increase their budget to increase revenue until further research is conducted. We would, however, recommend that BFM consider producing movies geared toward younger audiences.
+
+Based on our analysis, we believe a strong direction for future research would be to study what factors lead to an increase in the number of IMDb votes, as this seemed to positively impact revenue. Additionally, future research could explore the effect that different marketing tactics (social media, TV commercials, etc.) have on a movie’s revenue output. We recommend that production companies interested in further analysis utilize explanatory models and pay close attention to the five main assumptions of the CLM to optimize the predictability of the results.  
+
+\pagebreak
+
+## References
+1. GRIJALVA, DANIEL. (2021). Movie Industry. Kaggle. \url{https://www.kaggle.com/datasets/danielgrijalvas/movies}
+\vspace{3pt}
+\hspace{15pt}
+2. Moore, S. (2021, December 10). Why film budgets are important, beyond the cost of production. Forbes. Retrieved April 13, 2023, from \url{https://www.forbes.com/sites/schuylermoore/2019/04/13/the-importance-of-film-budgets/?sh=668e219b27f5} 
+\vspace{3pt}
+\hspace{15pt}
+3. Bruin, J. 2006. newtest: command to compute new test. UCLA: Statistical Consulting Group. \url{https://stats.oarc.ucla.edu/other/mult-pkg/faq/general/faqhow-do-i-interpret-a-regression-model-when-some-variables-are-log-transformed/}
+\vspace{3pt}
+\hspace{15pt}
+4. IMDB-Editors. (2016, December 7). Top 100 of 2016. IMDb. Retrieved April 3, 2023, from \url{https://www.imdb.com/list/ls066347533/}
+\vspace{3pt}
+\hspace{15pt}
+5. Apte, N., Forssell, M., & Sidhwa, A. (2011). Predicting movie revenue. CS229, Stanford University.
+
+
+
+
+
+

@@ -1,0 +1,131 @@
+---
+title: "Final models and Stargazer table with Confirmation data"
+author: "Roshni Tajnekar, Erik Sambrailo, Jenna Sparks, Bailey Kuehl"
+date: '2023-04-13'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r install packages, message=FALSE, echo=FALSE, results = 'hide'}
+library(tidyverse)
+library(dbplyr)
+library(latex2exp) 
+library(tinytex)
+library(knitr)
+library(lemon) #pretty print
+library(stargazer)
+library(sandwich)
+library(lmtest)
+library(Hmisc)
+library(corrplot)
+library(regclass)
+library(car)
+library(moments)
+```
+
+
+```{r load test_data, echo=FALSE, message=FALSE}
+conf_df <- read_csv('./folded_test_set.csv')
+# Drop extra id ("X") column
+conf_df <- subset(conf_df, select = -c(X))
+
+#changing gross to revenue for clarity
+names(conf_df)[names(conf_df) == "gross"] <- "revenue"
+conf_df <- conf_df[,c("revenue", "budget", "votes", "rating", "runtime", "country")]
+summary(conf_df)
+
+```
+
+## Final models for regression
+### Model1 - With log(gross),  log(budget)
+$$
+ln(\text{revenue}) = \beta_0 + \beta_1\cdot ln(\text{budget}) 
+$$
+```{r model1, echo=FALSE}
+
+model_one <- lm(log(revenue) ~ log(budget), data = conf_df)
+coef(model_one, vcov = vcovHC(model_one))
+summary(model_one)
+kurtosis(model_one$residuals) - 3
+
+par(mfrow = c(2,2))
+plot(model_one, which = 1)
+plot(model_one, which = 2)
+plot(model_one, which = 3)
+plot(model_one, which = 4)
+plot(model_one, which = 5)
+
+```
+
+### Model 2 - With log(revenue),  log(budget), log(votes), rating
+$$
+ln(\text{revenue}) = \beta_0 + \beta_1\cdot ln(\text{budget}) +\beta_2\cdot ln(\text{votes}) + \beta_3\cdot \text{rating}
+$$
+```{r model2, echo=FALSE}
+
+model_two <- lm(log(revenue) ~ log(budget) + log(votes) + rating, data = conf_df)
+coef(model_two, vcov = vcovHC(model_two))
+summary(model_two)
+
+vif(model_two) # Linearity assumption met
+kurtosis(model_two$residuals) - 3 # Normality assumption not met
+
+par(mfrow = c(2,2))
+plot(model_two, which = 1)
+plot(model_two, which = 2)
+plot(model_two, which = 3)
+plot(model_two, which = 4)
+plot(model_two, which = 5)
+
+```
+
+### Model 3 - With log(revenue),  log(budget), log(votes), rating, runtime, country
+$$
+ln(\text{revenue}) = \beta_0 + \beta_1\cdot ln(\text{budget}) +\beta_2\cdot ln(\text{votes}) + \beta_3\cdot \text{age certification} + \beta_4\cdot \text{runtime} + \beta_5\cdot \text{country}
+$$
+
+```{r model3, echo=FALSE}
+
+model_three <- lm(log(revenue) ~ log(budget) + log(votes) + rating + runtime + country, data = conf_df)
+coef(model_three, vcov = vcovHC(model_three))
+summary(model_three)
+
+kurtosis(model_three$residuals) - 3
+vif(model_three)
+
+par(mfrow = c(2,2))
+plot(model_three, which = 1)
+plot(model_three, which = 2)
+plot(model_three, which = 3)
+plot(model_three, which = 4)
+plot(model_three, which = 5)
+
+```
+
+
+## Stargazer table with above models
+```{r stargazer, echo=FALSE, warning=FALSE}
+se.model_one = sqrt(diag(vcovHC(model_one)))
+se.model_two = sqrt(diag(vcovHC(model_two)))
+se.model_three = sqrt(diag(vcovHC(model_three)))
+
+stargazer(model_one, model_two, model_three,  type = "text", omit.stat = "f",
+          title = "OLS Models of Revenue based on Budget, votes and ratings for movie revenue empirical study",
+          se = list(se.model_one, se.model_two,se.model_three),
+          star.cutoffs = c(0.05, 0.01, 0.001)
+          )
+
+```
+
+## Stargazer with BLP model
+```{r stargazer, echo=FALSE, warning=FALSE}
+stargazer(model_two,  type = "text", omit.stat = "f",
+          title = "OLS Models of Revenue based on Budget, votes and ratings for movie revenue empirical study",
+          se = list(se.model_two),
+          star.cutoffs = c(0.05, 0.01, 0.001)
+          )
+```
+

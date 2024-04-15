@@ -1,0 +1,158 @@
+---
+title: 'Lab 1, Part 2: Hypothesis Testing'
+subtitle: "Voting Difficulty in the 2020 Election"
+author: "Bailey Kuehl, Erik Sambrailo, Jenna Sparks, Roshni Tajnekar"
+date: '2023-03-07'
+output: 
+  pdf_document:
+      fig_caption: true
+      toc: true
+---
+
+```{r load packages, message=FALSE, echo=FALSE, results=FALSE}
+library(tidyverse)
+library(glue) #f-string like formatting
+library(latex2exp) # for writing Latex in plot text
+library(tinytex) # to convert to pdf
+library(insight) # format table display
+library(knitr) # format table display
+library(data.table) # format table display
+```
+
+```{r load data, echo=FALSE, results=FALSE}
+voters <- read.csv('./anes_timeseries_2020_csv_20220210.csv')
+head(voters, n = 5)
+```
+
+\pagebreak
+
+## 1 Importance and Context
+\vspace*{-2mm}
+One of the foundations of a democracy is the ability for individuals to participate in voting. This democratic process allows an individual to vote for leaders that best represent them and their interests. In the United States (US), every four years voters choose a presidential candidate that has historically been identified under two major political parties: Democrats and Republicans. Since there are a variety of methods to vote and these can vary between districts. Every voter’s journey to cast their ballot is unique and requires varied levels of effort.  Voters can encounter a variety of obstacles as well (i.e. travel time required, long waiting times) which can increase their difficulty to vote.  Research from the Pew Research Center suggests that people of different age groups, races, and education levels experienced varying levels of difficulty voting in the 2016 US Midterm Elections.\footnote{Pew Research Center. "In their own words: Why some people find voting difficult." (2018).} The research in this article suggests that difficulty when voting was disproportionately felt by individuals under the age of 30, black, or having completed less education. The Pew Research Center has also conducted research that shows party affiliation and demographics are often associated with each other.\footnote{Pew Research Center. "Wide Gender Gap, Growing Educational Divide in Voters’ Party Identification" (2018).} Combining these two studies indicates a potential discrepancy in the effort necessary for individuals of a certain party to vote.  As this threatens the validity of the democratic voting process, we want to know if there is a measurable statistical difference between the difficulty experienced by Democrats vs. Republicans when voting in the 2020 US Presidential Election.
+
+Our company, Statistical Answers Inc. has been contracted by US Voting Justice LLC. to answer the following question: **Did Democratic voters or Republican voters experience more difficulty voting in the 2020 election?** Our analysis will contribute to the existing body of work on voter accessibility by examining partisan differences in barriers to voting. This information will have important implications for campaign strategies and policy-making.
+
+## 2 Data and Methodology
+\vspace*{-2mm}
+In our analysis, we use 2020 time series data from the American National Election Studies (ANES)  \footnote{American National Election Studies. "ANES 2020 Time Series Study Full Release [dataset and documentation]" (2021).}. The dataset includes responses from pre- and post-election surveys for 8,280 individuals. 
+
+### 2.1 Definitions of Terms
+\vspace*{-2mm}
+Before we begin our analysis, we must first consider and define the following relevant terms: What is a "voter"?" Who is considered a "Democrat"? A "Republican?" What is meant by "voting difficulty"?
+
+In defining each of these terms, we consider the data tables available in the ANES Codebook. We define a **voter** as someone who indicated that they voted in the 2020 election, regardless of when or how they voted. Note that we considered including those who were registered to vote but could not vote due to extreme difficulties in this definition. See discussion section for details.
+
+To define one's **political party**, we started with a review of self-identified affiliation. In the pre-election survey, individuals were asked a series of questions about their political affiliation and its strength. The results of these questions were used to map individuals by the strength of their affiliation. Every individual showing any level of lean towards  Democrat or Republican was categorized into those respective parties. To further validate this categorization, we reviewed post-election survey questions about which political party they felt close to and represented their views. We also looked at their official vote for the presidential candidate. We omitted individuals where these responses contradicted the initial political grouping. While there were few individuals that met this contradiction, we felt this secondary check was necessary for validating our political affiliation definition. 
+
+Finally, we define a voter's **voting difficulty** based on a rating of how difficult it was for them to vote on a scale of 1 to 5 (5 being the most difficult). Although we considered counting the number of difficulties reported per individual (e.g., work conflicts, long wait times), we found this approach to be impractical because the impact of each difficulty varies and comparing them across individuals in a sample would have been challenging and potentially unreliable.
+
+A summary of term definitions and the ANES Codebook tables from which they were derived from are shown below in Table 1.
+\footnotesize
+```{r defining variables in table, message=FALSE, echo=FALSE}
+#define table
+df <- data.frame(
+  'ANES Table' = c("V202109x", "V201231x (primary)", "V202443, V202429, V202073 (secondary)", "V202119"),
+  Description = c("How did you vote? Did you vote? Where are you registered to vote?", 
+                  "Would you call your affiliation strong? Do you lean either direction?", 
+                  "Which political party do you feel closest to? Which best represents your views? Which presidential candidate did you vote for?", 
+                  "How difficult was it for you to vote in this election?"),
+  check.names = FALSE)
+
+#add rows
+rownames(df) <- c("Voter", "Political", "Party", "Difficulty Voting")
+
+#display table
+kable(
+  df,
+  caption = "Defining Voter, Political Party, and Difficulty", 
+  booktabs = TRUE, 
+)
+
+```
+\normalsize
+
+Table 2 demonstrates the modifications made to our dataset in order to filter it down to a finalized, testable set.
+\footnotesize
+```{r accounting variables, message=FALSE, echo=FALSE}
+#define table
+acc_df <- data.frame(
+   'Reason for Removal' = c("Start","Select Relevant Columns", "Non-voters", "Neutral Political Affiliation", "Binary Political Affiliation", "Validate Political Affiliation", "Non-responsive Difficulty Results"),
+   '# Samples Removed' = c(0,0,1830,576,0,61,46),
+   '# Samples Remaining' = c(8280,8280,6450,5874,5874,5813,5767),
+   check.names = FALSE)
+
+#display table
+kable(
+  acc_df,
+  caption = "Accounting Table: Sample Removal", 
+  booktabs = TRUE,)
+```
+\normalsize
+
+### 2.2 Wilcoxon Rank Sum 
+\vspace*{-2mm}
+We are now ready to determine which statistical methodology to use in order to test our hypothesis. To conduct a hypothesis test, we must first satisfy the assumption that the data used is independent and identically distributed (IID). We can reasonably assume this because the sample population is approximately random. Based on how we have defined “Democrat” and “Republican”, a single individual can be grouped as either a Democrat or a Republican. To measure the difference in voting difficulty between these two groups, we can reasonably consider an unpaired test. Because we have chosen a Likert-scale variable to measure our dependent variable, we cannot utilize an unpaired t-test, which requires metric data. Instead, we will use the Wilcoxon Rank Sum Test to test our hypothesis, which allows for ordinal data. We assert that the data is ordinal since it is qualitative.
+
+We choose our null hypothesis as follows: The probability of Democratic voters (D) experiencing more difficulty voting in the 2020 election than Republican voters (R) is the same as the probability that Democratic voters experiencing less difficulty voting in the 2020 election than Republican voters.  Our alternative hypothesis is that the probability of Democratic voters experiencing more difficulty in the 2020 election than Republican voters is not the same as the probability that Democratic voters experiencing less difficulty voting in the 2020 election than Republican voters. 
+
+  $H_0$:  $P(D > R) = P(D < R)$ and $H_1$: $P(X>Y) \not= P(X<Y)$
+  
+Before beginning our analysis, we wanted to visualize the distributions of difficulty experienced by the two defined groups of Democrats and Republicans. We find the distributions to be fairly similar, and that both groups skewed towards "Not at all Difficult" responses. These distributions are shown below in Figure 1. 
+
+\newgeometry{top=0.1cm, bottom=0.2cm}
+```{r use to pull from EDA file source, message=FALSE, echo=FALSE, results=FALSE, fig.width=8, fig.height=5}
+source_rmd <- function(file, local = FALSE, ...){
+  options(knitr.duplicate.label = 'allow')
+  
+  tempR <- tempfile(tmpdir = ".", fileext = ".R")
+  on.exit(unlink(tempR))
+  knitr::purl(file, output=tempR, quiet = TRUE)
+  
+  envir <- globalenv()
+  source(tempR, local = envir, ...)
+}
+
+path <- './L1.2_EDA.Rmd'  #input your path here
+source_rmd(path)
+```
+
+\vspace*{-3mm}
+## 3 Results
+Below are our results for the Wilcoxon Rank Sum test.
+\tiny
+```{r run Wilcoxon Rank Sum test, results=TRUE, echo=FALSE}
+#Filter out responses that were not 1-5
+validated_likert <- pa_voters[pa_voters$pst_likert_diff >=1,]
+
+#Make df for Wilcoxon test data
+df <- data.frame(group = c(validated_likert$pol_affil), 
+                 value = c(validated_likert$pst_likert_diff))
+wilcox.test(value ~ group, data = df, conf.int = TRUE)
+
+```
+\normalsize
+We find that our test resulted in a p-value that is less than 0.05. This indicates that the likelihood of obtaining a difference as large as, or larger than, what we observed by chance is less than 5%. Thus, we reject the null hypothesis that there is equal likelihood of difficulty voting among Republicans versus Democrats, and conclude that the result is statistically significant. 
+
+## 4 Discussion
+\vspace*{-2mm}
+Our study found that, statistically, Democrats experienced more difficulty when voting than Republicans during the 2020 Presidential Election. However, we must also consider the practical significance of this result, as well as the caveats of our analysis.
+
+First, it is essential to consider that the dataset we analyzed only contained 5,813 voters out of the 154.6 million voters who participated in the 2020 election \footnote{United States Census Bureau. "Census Bureau Releases 2020 Presidential Election Voting Report" (2022).} This means that our survey only represents 0.004% of voters in the election. Thus, our dataset does not represent a substantial portion of the voting population. Additionally, in deciding to keep our definition of “voter” simple (Table 1), we excluded individuals who identified in the survey that they did not vote, or did not respond to that specific question. As a result, 1,830 potential voters were removed from our sample.
+
+While we assumed IID in our sample, we recognize that the nature of our data may pose concerns to this assumption. One concern is that all participants who filled out this survey are likely similar in that they are not easily deterred from difficult tasks, given that they voluntarily responded to this lengthy survey. As our test attempts to compare difficulties among voters, survey respondents may not be completely independent of one another. Another potential violation is that voter party affiliation is associated with geographical regions and there is no verification that the sample was taken in a systematic way to not have influence between participants.
+
+In the future, our analysis can contribute to a broader effort to help political campaigns better understand and address the specific obstacles faced by different groups of voters. Additionally, the insights from our analysis could inform the development of more effective laws and programs aimed at improving voter accessibility.
+\restoregeometry
+\pagebreak
+
+## 5 References
+\vspace*{-2mm}
+American National Election Studies. ANES 2020 Time Series Study Full Release [dataset and documentation]. July 19, 2021 version
+
+Pew Research Center. In their own words: Why some people find voting difficult”. November 5, 2018
+
+Pew Research Center. “Wide Gender Gap, Growing Educational Divide in Voters’ Party Identification”. March 20, 2018.
+
+United States Census Bureau. “Census Bureau Releases 2020 Presidential Election Voting Report”. February 17, 2022
+
+

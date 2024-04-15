@@ -8,5 +8,6 @@ This repo contains examples of the work performed as referenced in my resume.  B
 5) **XGBoost for Predicting Pet Adoption Speeds** - Berkeley, Applied Machine Learning
 6) **Causal Inference for Presidential Elections** - Berkeley, Data Science Statistics
 7) **Analyzing Global Warming** - Berkeley, Data Science Programming
+8) **Python Classes for Similation of Competitive Google Ads Bidding** - Berkeley, Data Science Programming
 
 

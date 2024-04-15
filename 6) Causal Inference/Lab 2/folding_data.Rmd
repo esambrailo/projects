@@ -1,0 +1,50 @@
+---
+title: 'Folding Age_Cert in Exploratory & Test Datasets'
+author: "Bailey Kuehl, Erik Sambrailo, Jenna Sparks, Roshni Tajnekar"
+date: '2023-04-09'
+header-includes:
+   - \usepackage{amssymb}
+   - \usepackage[makeroom]{cancel}
+output: pdf_document
+---
+
+
+# Looking at Exploratory Dataset
+
+Looking to fold age certification and country. 
+
+No folding need for age certification. 
+
+```{r load exploratory, echo=FALSE, results=FALSE}
+#loading exploratory
+exp <- read.csv('./exploratory_set.csv')
+exp <- exp[!exp$rating == "Not Rated",]
+table(exp$rating)
+
+exp$country[!exp$country == "United States"] <- "Other"
+table(exp$country)
+
+summary(exp)
+
+write.csv(exp, file="./folded_explanatory_set.csv")
+```
+
+# Looking at Test Dataset
+
+Converted 2 G records to PG, and 1 TV-MA record to R. 
+
+```{r load Test, echo=FALSE, results=FALSE}
+#loading exploratory
+test <- read.csv('./test_set.csv')
+
+test$rating[test$rating == "G"] <- "PG"
+test$rating[test$rating == "TV-MA"] <- "R"
+test <- test[!test$rating == "Not Rated",]
+
+table(test$rating)
+
+test$country[!test$country == "United States"] <- "Other"
+table(test$country)
+summary(test)
+write.csv(test, file="./folded_test_set.csv" )
+```

@@ -1,0 +1,397 @@
+---
+title: 'Exploratory Data Analysis'
+subtitle: 'Lab 1, Part 2'
+author: "Bailey Kuehl, Erik Sambrailo, Jenna Sparks, Roshni Tajnekar"
+date: '2023-03-07'
+output: 
+  pdf_document:
+      fig_caption: true
+---
+
+```{r load packages, message=FALSE, echo=FALSE, results=FALSE}
+library(tidyverse)
+library(dbplyr)
+library(glue) #f-string like formatting
+library(latex2exp) # for writing Latex in plot text
+library(tinytex) # to convert to pdf
+library(insight) # format table display
+library("ggpubr") #for box plots
+```
+
+```{r load data, echo=FALSE, results=FALSE}
+#Loading in the ANES 2020 voter data, as well as files that contain the variables that we have identified as relevant for our analysis. 
+#ANES 2020 data
+ANES_2020_complete <- read.csv('./anes_timeseries_2020_csv_20220210.csv')
+dim(ANES_2020_complete)#size of original dataset
+#df of relevant political affiliation variables
+pa_vars <- read.csv('./political_affiliation_var_v2.csv')
+#df of relevant difficulty voting variables
+dif_vars <- read.csv('./difficulty_var_v2.csv')
+#relevant voter variable
+vote_vars <- c('V202109x')
+#variable for unique ID
+ID_vars <- c('V200001')
+```
+
+```{r reduce dataset, echo=FALSE, results=FALSE}
+# Reducing the dataset by the variables (columns) that we care about and re-assigning the column names for each. 
+#combine all the relevant variable columns into one vector
+var <- c(ID_vars, vote_vars, pa_vars$variable, dif_vars$variable)
+#combine names for all columns
+names <- c('ID', 'turnout', pa_vars$title, dif_vars$title)
+#create new df of relevant columns
+rel_voters <- ANES_2020_complete[,var]
+#change column names for new df
+colnames(rel_voters) <- c(names)
+head(rel_voters, 5)
+dim(rel_voters)
+```
+
+# Research Question
+
+**Did Democratic voters or Republican voters experience more difficulty voting in the 2020 election?**
+
+# Sub-Questions
+Below are some of the sub-questions that need to be answered in order to answer the research question. 
+
+## Voter: How are we defining who is a voter?
+
+Based off the codebook, there appears to be one good summary variable, **V202109X**, that combines three survey questions into an analysis of whether an individual voted or not (*details of how that is derived is in programming section of codebook*)
+
+1) V201024: Which one of the following best describes how you voted (early)?
+2) V202066: Did voter vote in November 2020 election?
+3) V202051: Where are you registered to vote? *(I am not seeing how this variable is relevant or referenced, but including it since it was listed)*
+
+```{r exploring voter data, echo=FALSE, results=FALSE}
+#reviewing the turnout variable and reducing to verified turnout.
+# 1 = Voted
+# 0 = Did not Vote
+table(rel_voters$turnout)#returning value distribution
+#reducing dataset 
+rel_voters <- rel_voters[rel_voters$turnout == 1,]
+dim(rel_voters)
+```
+
+Using this variable to review our dataset, we find that **6,450** of the original 8,280 rows contain individuals that are believed to have voted. 
+
+## Political Affiliation: How are we defining the political affiliation of individuals?
+
+There are multiple variables that could assist in defining what political party an individual best aligns with. Similar to voter, there is a calculated variable, **V201231x**, which is based on several other variables and might be our best indicator for the political affiliation of an individual.
+
+It is composed of the following survey variables:
+
+1) V201228: Do you think of yourself as Democrat, Republican, or other?
+2) V201229: Would you call your affiliation strong?
+3) V201230: If you didn't identify, do you lean either direction?
+
+```{r exploring political affiliation, echo=FALSE, results=FALSE}
+#reviewing the party_ID variable and removing useless responses. 
+# -9 = Refused 
+# -8 = Don't know
+# 1-3 Democrat affiliation
+# 4 = Independent
+# 5-7 Republican affiliation
+table(rel_voters$pre_party_id_summary)#returning value distribution
+#reducing dataset
+pa_voters <- rel_voters[!rel_voters$pre_party_id_summary %in% c(-9, -8, 4),]
+#creating a new column for binary political affiliation
+pa_voters$pol_affil <- pa_voters$pre_party_id_summary
+#assigning 1 for Democrat & 2 for Republican
+pa_voters$pol_affil[pa_voters$pre_party_id_summary %in% c(1,2,3)] <- 1
+pa_voters$pol_affil[pa_voters$pre_party_id_summary %in% c(5,6,7)] <- 2
+#checking new column
+table(pa_voters$pol_affil)
+dim(pa_voters)
+```
+
+There are very few individuals (16) that did not provide information regarding affiliation, and 560 individuals that are categorized as Independent *(Democrat/Republican neutral)*. This reduces our number of individuals with some sort of affiliation lean to **5874**. 
+
+### Double Checking Affiliation
+
+#### Do any of the earmarked "nuetral" individuals show signs political affiliation?
+
+
+To test this we reviewed individuals from the previous test that responded as Independent.  We checked their responses to other variables that might provide evidence of affiliation.  The variables we have selected are as follows:
+
+1) V201018: What political party are you registered with? (pre-vote)
+2) V202064: What political party are you registered with? (post-vote)
+3) V202429: Which party represents your views best?
+4) V202443: Which party do you feel closest to?
+5) V202073: Which President did you vote for?
+
+```{r checking independents, echo=FALSE, results=FALSE} 
+# check 1: were any of the eliminated "independent" voters showing strong affiliation in other responses?
+#creating a supplementary df of the individuals earmarked as independent to review
+independent <- rel_voters[rel_voters$pre_party_id_summary == 4,]
+#reviewing a few additional variables for independent individuals for political affiliation clues
+table(independent$pre_party_reg)
+#pre-vote registration: 1 = Dem, 2 = Rep
+table(independent$pst_party_reg)
+#post-vote registration: 1 = Dem, 2 = Rep
+table(independent$pst_party_views)
+#party that best represents views: 1 = Dem, 5 = Rep
+table(independent$party_close)
+#party you feel closest to: 1 = Dem, 3 = Rep
+table(independent$pres_vote)
+#Presidential vote: 1 = Biden = Dem, 2 = Trump = Rep
+#creating a new column that explores the potential affiliation of the neutral individuals. 
+pot_dem <- independent[independent$pre_party_reg == 1
+                       & independent$pres_vote == 1,]
+dim(pot_dem)
+#potential independents that could be republicans
+pot_rep <- independent[independent$pre_party_reg == 2
+                       & independent$pres_vote == 2,]
+dim(pot_rep)
+```
+
+Only 2 of these five survey questions were well answered by this subset of Independent voters.  The two questions were the pre-vote registration and presidential vote. Reviewing those two questions, of the 560 individuals, there were 23 that answered Democrat to both, and 9 that answered Republican to both. Since this is such a small quantity compared to our current sample size, we will continue to leave these individuals out of our active dataset.  
+
+#### For the individuals we have grouped by political affiliation, do any of them have survey answers that conflict their current affiliation?
+
+We will use and check the same variables as above against the two political affiliations to see how they align. 
+
+```{r double checking affiliaton, echo=FALSE, results=FALSE} 
+#creating temp df of Democrat voters to test
+dem_voters <- pa_voters[pa_voters$pol_affil == 1,]
+dim(dem_voters)
+#creating temp df of Republican voters to test
+rep_voters <- pa_voters[pa_voters$pol_affil == 2,]
+dim(rep_voters)
+```
+
+```{r checking democrats, echo=FALSE, results=FALSE} 
+#check 2.1: Are any democrats showing conflicting results for other variables. 
+#reviewing a few additional variables 
+table(dem_voters$pre_party_reg)
+#pre-vote registration: 1 = Dem, 2 = Rep
+table(dem_voters$pst_party_reg)
+#post-vote registration: 1 = Dem, 2 = Rep
+table(dem_voters$pst_party_views)
+#party that best represents views: 1 = Dem, 5 = Rep
+table(dem_voters$party_close)
+#party you feel closest to: 1 = Dem, 3 = Rep
+table(dem_voters$pres_vote)
+#Presidential vote: 1 = Biden = Dem, 2 = Trump = Rep
+#potential democrats that could be republican
+pot_dem_to_rep <- dem_voters[dem_voters$pst_party_views == 5
+                       & dem_voters$party_close == 3
+                       & dem_voters$pres_vote == 2,]
+dim(pot_dem_to_rep)
+```
+
+Once again some of these variables did not have high response rates, so we are choosing to focus on the three questions. Below are the three questions and the number of Democrat individuals that responded in favor of Republican for each:
+
+1) V202429: Which party represents your views best? **65 Republican responses**
+2) V202443: Which party do you feel closest to? **54 Republican responses**
+3) V202073: Which President did you vote for? **90 Republican responses**
+
+Of the 3,160 Democrat individuals, **24** provided Republican responses to all three of these questions.  Because this conflicts with how we currently have them grouped, we will be removing them from the dataset. 
+
+```{r checking republicans, echo=FALSE, results=FALSE} 
+#check 2.2: Are any republicans showing conflicting results for other variables. 
+#reviewing a few additional variables 
+table(rep_voters$pre_party_reg)
+#pre-vote registration: 1 = Dem, 2 = Rep
+table(rep_voters$pst_party_reg)
+#post-vote registration: 1 = Dem, 2 = Rep
+table(rep_voters$pst_party_views)
+#party that best represents views: 1 = Dem, 5 = Rep
+table(rep_voters$party_close)
+#party you feel closest to: 1 = Dem, 3 = Rep
+table(rep_voters$pres_vote)
+#Presidential vote: 1 = Biden = Dem, 2 = Trump = Rep
+#potential republicans that could be democrats
+pot_rep_to_dem <- rep_voters[rep_voters$pst_party_views == 1
+                       & rep_voters$party_close == 1
+                       & rep_voters$pres_vote == 1,]
+dim(pot_rep_to_dem)
+```
+
+In our initial Republican grouping, below are the individuals that provided Democrat responses.
+
+1) V202429: Which party represents your views best? **67 Democrat responses**
+2) V202443: Which party do you feel closest to? **80 Democrat responses**
+3) V202073: Which President did you vote for? **264 Republican responses**
+
+Of the 2,714 Republican individuals, **37** provided Democrat responses to all three of the above questions. We will be removing these from our dataset as well. 
+
+```{r removing questionable affiliation, echo=FALSE, results=FALSE} 
+#removing individuals from exercises above from our master dataset, 'pa_voters'. 
+#by removing variables 'pot_rep_to_dem' & 'pot_dem_to_rep'
+#combining the two df into one
+sus_affil <- rbind(pot_dem_to_rep, pot_rep_to_dem)
+dim(sus_affil)
+#re-assigning master dataset to exclude ID's found in df of suspect affiliation
+pa_voters <- pa_voters[!pa_voters$ID %in% sus_affil$ID,]
+dim(pa_voters)
+dim(pa_voters[pa_voters$pol_affil == 2,])
+```
+**This leaves us with 5,813 total individuals, 3,136 grouped as Democrat and 2,677 grouped as Republican**
+
+## Difficulty Voting: How are we defining difficulty voting?
+### The proposed test for using the **binary difficulty** variable is an unpaired t-test. This test requires normally distributed variables and metric data (and similar variance?).
+```{r checking difficulty using number of difficulties, echo=FALSE, results=FALSE, fig.width=10, fig.height=5}
+#Possible Values (V202123)
+  #-9. Refused, -7 = No post-election data, deleted due to incomplete interview -6 = No post-election interview -5 = Interview breakoff (sufficient partial IW)
+  #-1. Inapplicable, 0 = Not mentioned, 1 = Mentioned
+#Variables of difficulty
+  #diff_reg
+  #diff_id_card
+  #diff_absentee
+  #diff_ballot
+  #diff_travel
+  #diff_waiting
+  #diff_work_confl
+  #diff_weather
+  #diff_mail_ballot
+  #diff_other
+  #diff_none
+#Get counts of each for demo vs repub
+#Democrats
+demo = pa_voters[pa_voters$pol_affil == 1,]
+diff_reasons_demo <- data.frame(apply((demo[c('diff_reg', 'diff_id_card', 'diff_absentee', 'diff_ballot', 'diff_travel', 'diff_waiting', 'diff_work_confl', 
+                                   'diff_weather', 'diff_mail_ballot', 'diff_other', 'diff_none')]), 2, table))
+#Filter out to only where difficulty was mentioned (=1)
+diff_reasons_demo <- diff_reasons_demo %>%  filter(!row_number() %in% c(1, 2, 3, 4))
+########
+#Republicans
+repo = pa_voters[pa_voters$pol_affil == 2,]
+diff_reasons_repo <- data.frame(apply((repo[c('diff_reg', 'diff_id_card', 'diff_absentee', 'diff_ballot', 'diff_travel', 'diff_waiting', 'diff_work_confl', 
+                                   'diff_weather', 'diff_mail_ballot', 'diff_other', 'diff_none')]), 2, table))
+#Filter out to only where difficulty was mentioned (=1)
+diff_reasons_repo <- diff_reasons_repo %>%  filter(!row_number() %in% c(1, 2, 3, 4))
+print("Distribution of difficulty, all reasons, Democrats")
+diff_reasons_demo
+print("Distribution of difficulty, all reasons, Republicans")
+diff_reasons_repo
+#Break out by party to see distributions
+democrat_difficulty <- data.frame(
+                       x = c('diff_reg', 'diff_id_card', 'diff_absentee', 'diff_ballot', 'diff_travel', 'diff_waiting', 'diff_work_confl', 
+                                   'diff_weather', 'diff_mail_ballot', 'diff_other', 'diff_none'),
+                       y = c(diff_reasons_demo$diff_reg, diff_reasons_demo$diff_id_card, diff_reasons_demo$diff_absentee, diff_reasons_demo$diff_ballot, diff_reasons_demo$diff_travel, 
+                             diff_reasons_demo$diff_waiting, diff_reasons_demo$diff_work_confl, diff_reasons_demo$diff_weather, diff_reasons_demo$diff_mail_ballot, diff_reasons_demo$diff_other, 
+                             diff_reasons_demo$diff_none))
+t_blue <- adjustcolor( "blue", alpha.f = 0.2)
+barplot(democrat_difficulty$y ~ democrat_difficulty$x, las=2, col=t_blue, xlab = "Difficulty Reason", ylab = "Difficulty Count", main = "Difficulty for Repub vs Demo", plot = FALSE)
+republican_difficulty <- data.frame(
+                       x = c('diff_reg', 'diff_id_card', 'diff_absentee', 'diff_ballot', 'diff_travel', 'diff_waiting', 'diff_work_confl', 
+                                   'diff_weather', 'diff_mail_ballot', 'diff_other', 'diff_none'),
+                       y = c(diff_reasons_repo$diff_reg, diff_reasons_repo$diff_id_card, diff_reasons_repo$diff_absentee, diff_reasons_repo$diff_ballot, diff_reasons_repo$diff_travel, 
+                             diff_reasons_repo$diff_waiting, diff_reasons_repo$diff_work_confl, diff_reasons_repo$diff_weather, diff_reasons_repo$diff_mail_ballot, diff_reasons_repo$diff_other, 
+                             diff_reasons_repo$diff_none))
+t_red <- adjustcolor( "red", alpha.f = 0.5)
+barplot(republican_difficulty$y ~ republican_difficulty$x, las=2, add = TRUE, col=t_red, plot = FALSE)
+```
+
+
+## Now let's try to run the tests and plot some figures.
+### First, Wilcoxon Rank Sum test using Likert Scale data (pst_likert_diff)
+```{r run Wilcoxon Rank Sum test}
+#Need to filter out responses that were not 1-5
+validated_likert <- pa_voters[pa_voters$pst_likert_diff >=1,]
+#5,767 remain
+#make df for wilcoxon test data
+df <- data.frame(
+  group = c(validated_likert$pol_affil),
+  value = c(validated_likert$pst_likert_diff)
+)
+wilcox.test(value ~ group, data = df, conf.int = TRUE)
+```
+### The proposed test for using the **Likert** variable is Wilcoxon Rank Sum. This test requires similar distributions for each sample.
+```{r checking difficulty using Likert, echo=FALSE, results=FALSE, fig.width=10, fig.height=5}
+#Likert
+  #1 = Not difficult at all, 2 = A little difficult, 3 = Moderately difficult, 4 = Very difficult, 5 = Extremely difficult
+  #-9 = Refused, -7 = No post-election data, deleted due to incomplete interview, -6 = No post-election interview, 
+  #=-5 = Interview breakoff (sufficient partial IW)
+  
+#Get counts of each
+print("Distribution of all voters")
+table(pa_voters$pst_likert_diff)
+#Break out by party to see distributions
+#Dem: pol_affil = 1 ; Repub: pol_affil = 2
+print("Distribution of Dem voters")
+dem_lik <- pa_voters[pa_voters$pol_affil == 1,]
+table(dem_lik$pst_likert_diff)
+print("Distribution of Repub voters")
+rep_lik <- pa_voters[pa_voters$pol_affil == 2,]
+table(rep_lik$pst_likert_diff)
+#barplots
+tbl <- with(validated_likert, table(pst_likert_diff, pol_affil))
+barplot(tbl, beside = TRUE, ylim = c(0,3000), main = "Figure 1: Distribution of Voting Difficulty: Democrats vs Republicans", legend.text = c("1: Not difficult at all", "2: A little difficult", "3: Moderately difficult", "4: Very difficult", "5: Extremely difficult"), args.legend = list(x = "topright", bty="n", cex = 0.7), ylab = "# of Responses", names.arg=c("Democrats","Republicans"))
+```
+We find that the p-value is < 0.05, meaning that we reject the null hypothesis. We note that the "difference in location" (which seems to correspond to the median difference between samples from both groups), is very small. This tells us that the difference is statistically significant, but likely not practically significant. 
+
+### Next, we will try an unpaired, two sample t-test using the counts of difficulties. 
+```{r run unpaired t test, echo=FALSE, results=FALSE,}
+################ Scratch Work Start
+#Here's how many people experienced at least 1 type of difficulty 
+some_difficulty <- filter(pa_voters, diff_reg == 1 | diff_id_card ==1 | diff_absentee ==1 | diff_ballot ==1| diff_travel ==1 | diff_waiting ==1 | 
+                            diff_work_confl ==1 | diff_weather ==1 | diff_mail_ballot ==1 | diff_other ==1)
+#filtered down to 862 people
+#People who did not experience any difficulty 
+no_difficulty <- filter(pa_voters, diff_reg == 0 & diff_id_card ==0 & diff_absentee ==0 & diff_ballot ==0& diff_travel ==0 & diff_waiting ==0 & 
+                            diff_work_confl ==0 & diff_weather ==0 & diff_mail_ballot ==0 & diff_other ==0)
+# 4904 people
+################ Scratch Work End 
+#Filter out rows that are not 0 or 1
+valid_diffs <- filter(pa_voters, diff_reg == 1 | diff_reg == 0 | diff_id_card ==1 | diff_id_card ==0 | diff_absentee ==1 | diff_absentee ==0| 
+                        diff_ballot ==1| diff_ballot ==0| diff_travel ==1 |  diff_travel ==0 | diff_waiting ==1 | diff_waiting ==0 | 
+                        diff_work_confl ==1 | diff_work_confl ==0 | diff_weather ==1 |   diff_weather ==0 | diff_mail_ballot ==1 | 
+                        diff_mail_ballot ==0 | diff_other ==1, diff_other ==0)
+#5,586 left
+#This doesn't work
+#Count up the difficulties per person
+tab <- table(valid_diffs$diff_reg, valid_diffs$diff_id_card, valid_diffs$diff_absentee, valid_diffs$diff_ballot, valid_diffs$diff_travel, 
+             valid_diffs$diff_waiting, valid_diffs$diff_work_confl, valid_diffs$diff_weather, valid_diffs$diff_mail_ballot, valid_diffs$diff_other)
+tab <- cbind(tab, total_difficulty = rowSums(tab))
+#Run test
+#t.test(x, y, alternative = "two.sided", var.equal = FALSE)
+```
+
+
+
+**This leaves us with 5,813 total individuals, 3,136 grouped as Democrat and 2,677 grouped as Republican**
+
+## Difficulty Voting: How are we defining difficulty voting?
+```{r review current data, echo=FALSE, results=FALSE, message=FALSE}
+#Reviewing the variables specific to difficulty
+head(pa_voters[,dif_vars$title],10)
+#new vector of just the variables relevant to "types" of difficulties
+diff_types <- dif_vars[!dif_vars$title %in% c('pst_likert_diff','diff_none'),]
+#creating a new column for counting number of difficulties experienced. 
+#assigning 0 to rows with no difficulties
+pa_voters$diff_count[pa_voters$diff_none == 1] <- 0
+#summing the qty of all types of difficulties experienced
+#creates negative numbers where responses included negative-coded response
+pa_voters$diff_count <- rowSums(pa_voters[, diff_types$title])
+#checking distribution of difficulty quantities
+table(pa_voters$diff_count)
+ 
+#checking difficulty values for all negative values
+pa_voters[pa_voters$diff_count < 0,]
+#above confirms that all individuals returning a negative sum for difficulty count, had invalid responses for each of the difficulty types, so these rows hold no value
+#tables of difficulty counts
+table(pa_voters[pa_voters$pol_affil == 2
+               &pa_voters$diff_count >= 0,
+               ]$diff_count)
+table(pa_voters[pa_voters$pol_affil == 1
+               &pa_voters$diff_count >= 0,
+               ]$diff_count)
+#initial rough plot at a histogram of the difficulty counts for the two parties
+hist(pa_voters[pa_voters$pol_affil == 2
+               &pa_voters$diff_count > 0,
+               ]$diff_count, plot = FALSE)
+hist(pa_voters[pa_voters$pol_affil == 1
+               &pa_voters$diff_count > 0,
+               ]$diff_count, plot = FALSE)
+```
+
+```{r unpaired two sample t-test, echo=FALSE, message=FALSE}
+republican_difficulty = pa_voters[pa_voters$pol_affil == 2
+               &pa_voters$diff_count >= 0,
+               ]$diff_count
+democrat_difficulty = pa_voters[pa_voters$pol_affil == 1
+               &pa_voters$diff_count >= 0,
+               ]$diff_count
+t.test(republican_difficulty, democrat_difficulty, alternative = "two.sided", var.equal = FALSE)
+```

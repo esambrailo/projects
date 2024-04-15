@@ -1,0 +1,31 @@
+---
+title: 'Lab 1: Question 3.2'
+author: "Bailey Kuehl, Erik Sambrailo, Jenna Sparks, Roshni Tajnekar"
+date: "March 7, 2023"
+version: "1"
+header-includes:
+   - \usepackage{amssymb}
+   - \usepackage{cancel}
+output: pdf_document
+---
+
+```{r load packages, message=FALSE, echo=FALSE, results=FALSE, warning=FALSE}
+library(tidyverse)
+library(glue) #f-string like formatting
+library(latex2exp) # for writing Latex in plot text
+library(tinytex) # to convert to pdf
+```
+
+```{r load data, echo=FALSE, results=FALSE, warning=FALSE}
+legislators <- read_csv('../lab_1/datasets/legislators-current.csv', col_types = cols())
+```
+We would like to test whether Democratic or Republican senators are older and a **Wilcoxon rank-sum test (Comparisons)** is proposed. For this we define two random variables $D$ (Democrat Senator age) and $R$ (Republican Senator age), where both $d,r \in \mathbb{N}$. Because we are using the Hypothesis of Comparisons, the null hypothesis becomes $H_0: P(D<R) = P(R<D)$ Below we evaluate the assumptions for this test. 
+
+### Assumption 1: Ordinal Scale
+
+For this particular test the sampling only needs to come from at least an ordinal scale so comparisons can be made. In our particular instance, where $R$ & $D$ represent samples of age in years, we actually have an Ratio Metric Scale. **This assumption is satisfied.** 
+
+### Assumption 2: Independence
+
+All $(D_1, D_2, ... D_n)$ and $(R_1, R_2, . . . R_n)$ need to be I.I.D. One potential concern with this assumption regarding the data is geographical clustering of senators. This may result in clustering of socioeconomic statuses, backgrounds, political affiliations and beliefs. This means that sampling senators will not allow the data to be completely independent. **Therefore there are concerns with assuming IID.** 
+

@@ -1,0 +1,43 @@
+---
+title: "Lab2"
+author: "Bailey Kuehl, Erik Sambrailo, Jenna Sparks, Roshni Tajnekar"
+date: 'April 18, 2023'
+output: pdf_document
+---
+```{r}
+# Load beautiful dataset from EDA
+ntflx_movies <- read.csv('./ntflx_movies.csv')
+```
+
+```{r}
+# Set seed for reproducibility
+set.seed(123)
+
+# Get indices of observations with a star value
+star_indices <- which(!is.na(ntflx_movies$Star))
+
+# Get the number of observations in the star_indices vector
+num_stars <- length(star_indices)
+
+# Calculate the number of observations for the training set (30%)
+num_train <- round(0.3 * num_stars)
+
+# Randomly select indices for the training set
+train_indices <- sample(star_indices, num_train)
+
+# Create the training set
+train_df <- ntflx_movies[train_indices, ]
+
+# Create the testing set by excluding the training set indices
+test_df <- ntflx_movies[-train_indices, ]
+```
+
+```{r}
+# From Mark's OH for how to get a random draw of the A-List
+se    <- seq(1,242)
+train <- sample(se,80)
+
+#test  <- se!=train
+test  <- setdiff(se,train)
+```
+
