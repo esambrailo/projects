@@ -1,3 +1,0 @@
-**Building a Second-Price Auction (Modeling and Strategy)**
-
-Developed algorithms for an online ad auction, modeling a second-price auction scenario with strategic competitors. Designed classes including User, Bidder, and Auction, implementing methods for bidding, notification, and round execution. Emphasized object-oriented coding standards, achieving high readability and adherence to PEP8 guidelines. Competed in a final competition, showcasing strategic bidding algorithms against other data scientists' submissions, and achieved the highest possible score in the final bidding competition, demonstrating strong performance against other submissions.
