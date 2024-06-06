@@ -1,7 +1,7 @@
 # Projects
 This repo contains examples of the work performed as referenced in my resume.  Below are the projects included:
 
-1) **Mutivariate Time Series Forecasting for Product Packaging** - Sambrailo Packaging *(This project is proprietary. Detailed information and files are not publicly available. Please contact me for more information or to request access under appropriate confidentiality agreements.)*
+1) **Mutivariate Time Series Forecasting for Produce Packaging** - Sambrailo Packaging *(This project is proprietary. Detailed information and files are not publicly available. Please contact me for more information or to request access under appropriate confidentiality agreements.)*
 2) **RAG Chain Model for Q&A** - Berkeley, Generative AI
 3) **Spark & mapreduce . . .. for Commercial Flight Delay Predictions** - Berkeley, Machine Learning at Scale
 4) **Graph DB algorithms for Public Transporation** - Berkeley, Data Engineering
